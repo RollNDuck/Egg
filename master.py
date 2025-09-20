@@ -22,7 +22,7 @@ class EggPlayer:
         self.started = False
         self.on_platform = None
         self.last_platform = None
-        self.launched_from = None  # ^^FIX: Added to track platform we launched from
+        self.launched_from = None  # ^^
         self.score = 0
         self.landed = False
 
@@ -42,7 +42,7 @@ class EggPlayer:
         self.y += self.acceleration
 
         for plat in platforms:
-            if plat == self.launched_from:  # ^^FIX: Skip collision with platform we launched from
+            if plat == self.launched_from:  # ^^
                 continue
             if collision(self, plat) and self.acceleration >= 0:
                 self.y = plat.y - self.HEIGHT
@@ -52,7 +52,7 @@ class EggPlayer:
 
                 self.on_platform = plat
                 self.last_platform = plat
-                self.launched_from = None  # ^^FIX: Clear launched_from when landing on different platform
+                self.launched_from = None  # ^^
                 break
 
         if self.acceleration > 0:
@@ -61,7 +61,7 @@ class EggPlayer:
         death_line = scroll_y + 128
         if self.y > death_line:
             self.lives -= 1
-            self.launched_from = None  # ^^FIX: Clear launched_from on death to prevent getting stuck on respawn platform
+            self.launched_from = None  # ^^
             if self.lives > 0 and self.last_platform: # Death at platforms
                 self.y = self.last_platform.y - self.HEIGHT
                 self.x = self.last_platform.x + self.last_platform.WIDTH // 2 - self.WIDTH // 2
@@ -85,7 +85,7 @@ class EggPlayer:
 
         if pyxel.btn(pyxel.KEY_SPACE) and self.acceleration == 0:
             self.acceleration = -3.5
-            self.launched_from = self.on_platform  # ^^FIX: Remember which platform we launched from
+            self.launched_from = self.on_platform  # ^^
             self.on_platform = None
 
         if pyxel.btn(pyxel.KEY_LEFT) and self.acceleration != 0:
