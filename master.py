@@ -1,11 +1,13 @@
 import pyxel
 import random
 
+SPACE = 35 #SET PLATFORM DISTANCE
+
 class EggPlayer:
     def __init__(self):
         # Sprite Parameters
         self.x = 56
-        self.y = 0
+        self.y = 96
         self.IMG = 0
         self.U = 48
         self.V = 0
@@ -14,81 +16,114 @@ class EggPlayer:
         self.DX = 0.5
         self.COL = 2
 
-        # Game Parameters
+        #Status
         self.lives = 3
+        self.is_falling = False
         self.started = False
+        self.on_platform = None
+        self.last_platform = None
+        self.score = 0
+        self.landed = False
 
-        # ^^ Physics Parameters
+        # Physics
         self.gravity = 0.15
         self.acceleration = 0
-        # ^^Egg placement + platform determinant
-        self.on_platform = None
 
-    def update(self, platforms):
-        # ^^Platform logic
-        if self.on_platform is None:
-            self._update_airborne(platforms)
-        else:
-            self._update_on_platform()
+    def update(self, platforms, scroll_y):
+        if not self.started:
+            if pyxel.btnp(pyxel.KEY_SPACE):
+                self.started = True
+                self.acceleration = -3.5
+            return
 
-        if self.y >= 112:
-            self.y = 112
+        self.acceleration += self.gravity
+        self.acceleration = min(self.acceleration, 3.5)
+        self.y += self.acceleration
+
+        for plat in platforms:
+            if collision(self, plat) and self.acceleration >= 0:
+                self.y = plat.y - self.HEIGHT
+                self.acceleration = 0
+                if plat != self.last_platform:
+                    self.score += 1
+                
+                self.on_platform = plat
+                self.last_platform = plat
+                break
+
+        if self.acceleration > 0:
+            self.on_platform = None
+
+        death_line = scroll_y + 128
+        if self.y > death_line:
             self.lives -= 1
-            self.acceleration = 0
-            # ^^ Removed comments on locked position (adjusted via platform logic)
-            if platforms:
-                self.on_platform = platforms[0]
-                self.x = self.on_platform.x + self.on_platform.WIDTH/2 - self.WIDTH/2
-                self.y = self.on_platform.y - self.HEIGHT
+            if self.lives > 0 and self.last_platform: # Death at platforms
+                self.y = self.last_platform.y - self.HEIGHT
+                self.x = self.last_platform.x + self.last_platform.WIDTH // 2 - self.WIDTH // 2
+                self.acceleration = 0
+                self.on_platform = self.last_platform
+                self.is_falling = False
+            elif self.lives > 0 and self.last_platform is None: # Death at spawn
+                self.y = 96
+                self.x = 56
+                self.acceleration = 0
+                self.is_falling = False
+                self.on_platform = None
+                self.started = False
+            else: # No more lives
+                self.y = death_line - 1
+                self.acceleration = 0
+                self.started = False
+
+        if self.on_platform: # If on platform playher speed match the platform speed
+            self.x += self.on_platform.speed * self.on_platform.direction
 
         if pyxel.btn(pyxel.KEY_SPACE) and self.acceleration == 0:
             self.acceleration = -3.5
             self.on_platform = None
 
-    def _update_airborne(self, platforms):
-        # ^^Only include gravity if not on platform
-        self.acceleration += self.gravity
-        self.y += self.acceleration
+        if pyxel.btn(pyxel.KEY_LEFT) and self.acceleration != 0:
+            self.x -= 2
+        if pyxel.btn(pyxel.KEY_RIGHT) and self.acceleration != 0:
+            self.x += 2
 
-        # ^^If gravity present (egg not on platform), check if lands on platform
-        if self.acceleration > 0:
-            for platform in platforms:
-                egg_bottom = self.y + self.HEIGHT
-                egg_center_x = self.x + self.WIDTH/2
-                on_platform_vertically = platform.y <= egg_bottom <= platform.y + 5
-                on_platform_horizontally = platform.x <= egg_center_x <= platform.x + platform.WIDTH
+        if self.on_platform:
+            self.is_falling = False
+        elif self.acceleration > 0:
+            self.is_falling = True
+        else:
+            self.is_falling = False
 
-                if on_platform_vertically and on_platform_horizontally:
-                    # ^^ Platform landing
-                    self.y = platform.y - self.HEIGHT
-                    self.acceleration = 0
-                    self.on_platform = platform
-                    break
-
-    def _update_on_platform(self):
-        self.x = self.on_platform.x + self.on_platform.WIDTH/2 - self.WIDTH/2
-        self.y = self.on_platform.y - self.HEIGHT
-
-
+    def draw(self):
+        pyxel.blt(
+            self.x,
+            self.y,
+            self.IMG,
+            self.U,
+            self.V,
+            self.WIDTH,
+            self.HEIGHT,
+            self.COL
+        )
 class Platform:
-    def __init__(self, x ,y):
-        # ^^Platform Sprite Parameters
+    def __init__(self, x, y):
+        # Sprite Paramaters
         self.x = x
         self.y = y
         self.IMG = 0
-        self.U = 0  # ^^Temporary basic ahh boxes
-        self.V = 16  # ^^^^
-        self.WIDTH = 32
+        self.U = 8
+        self.V = 8
+        self.WIDTH = 24
         self.HEIGHT = 8
-        # ^^Random Reqs for platform
+        self.DX = 0.5
+        self.COL = 2
+        # Movement
         self.speed = random.uniform(0.5, 1.5)
-        self.direction = random.choice([-1, 1])
+        self.direction = random.choice([-1,1])
 
     def update(self):
-        # ^^ Move platform horizontally
         self.x += self.speed * self.direction
 
-        # ^^Reverse direction when hitting screen bounds
         if self.x <= 0:
             self.x = 0
             self.direction = 1
@@ -97,64 +132,68 @@ class Platform:
             self.direction = -1
 
     def draw(self):
-        # ^^Temporary basic ahh boxes
-        pyxel.rect(self.x, self.y, self.WIDTH, self.HEIGHT, 1)
-        pyxel.rectb(self.x, self.y, self.WIDTH, self.HEIGHT, 0)
+        pyxel.blt(
+            self.x,
+            self.y,
+            self.IMG,
+            self.U,
+            self.V,
+            self.WIDTH,
+            self.HEIGHT,
+            self.COL
+        )
 
 class EggRiseApp:
     def __init__(self):
         pyxel.init(128, 128, title="Pyxel Egg Rise Platformer")
         pyxel.load("platformer.pyxres")
         self.player = EggPlayer()
-        self.platforms = []
-
-        # ^^Create initial platforms (with set distance)
-        distance = 25
-        bottom_platform_y = 100
-        middle_platform_y = bottom_platform_y - distance - 8
-        top_platform_y = bottom_platform_y - 2 * (distance + 8)
-        platform_y_positions = [bottom_platform_y, middle_platform_y, top_platform_y]  # ^^Bottom to top
-
-        for i, y_pos in enumerate(platform_y_positions):
-            x_pos = random.randint(0, 96)  # ^^Random platform position
-            platform = Platform(x_pos, y_pos)
-            self.platforms.append(platform)
-
-        # ^^Start player on lowest platform
-        if self.platforms:
-            self.player.on_platform = self.platforms[0]
-            self.player.x = self.platforms[0].x + self.platforms[0].WIDTH/2 - self.player.WIDTH/2
-            self.player.y = self.platforms[0].y - self.player.HEIGHT
-
+        self.platform = [Platform(random.randint(0, 100), 80 - i * SPACE) for i in range(10)]
+        self.scroll_y = 0 # Camera Position
         pyxel.run(self.update, self.draw)
 
     def update(self):
-        # ^^ Include platforms
-        for platform in self.platforms:
-            platform.update()
+        self.player.update(self.platform, self.scroll_y)
+        for plat in self.platform:
+            plat.update()
 
-        self.player.update(self.platforms)
+        camera_y_level = self.player.y - 64
+        if camera_y_level < self.scroll_y:
+            self.scroll_y = camera_y_level
+
+        for plat in list(self.platform):
+            if plat.y - self.scroll_y > 128:
+                self.platform.remove(plat)
+                high_y = min(plats.y for plats in self.platform)
+                new_y = high_y - SPACE
+                self.platform.append(Platform(random.randint(0, 80), new_y))
 
     def draw(self):
         pyxel.cls(6)
+
+        pyxel.camera(0, self.scroll_y)
+
+        for plat in self.platform:
+            plat.draw()
+        self.player.draw()
+
+        pyxel.bltm(0, 0, 0, 0, 0, 128, 128, 2)
+
+        pyxel.camera()
         pyxel.text(0, 0, f"Lives: {self.player.lives}", 1)
+        pyxel.text(0, 8, f"Score: {self.player.score}", 1)
+        pyxel.text(0, 16, f"Falling {self.player.is_falling}", 1) #Check if falling or not for debugging
 
-        # ^^ Include platforms
-        for platform in self.platforms:
-            platform.draw()
-
-        pyxel.blt(
-            self.player.x,
-            self.player.y,
-            self.player.IMG,
-            self.player.U,
-            self.player.V,
-            self.player.WIDTH,
-            self.player.HEIGHT,
-            self.player.COL
-        )
 
 def GameOver():
     pass
+
+def collision(player, platform):
+    return (
+        player.x < platform.x + platform.WIDTH and
+        player.x + player.WIDTH > platform.x and
+        player.y + player.HEIGHT <= platform.y + 5 and
+        player.y + player.HEIGHT >= platform.y
+    )
 
 EggRiseApp()
