@@ -22,6 +22,7 @@ class EggPlayer:
         self.started = False
         self.on_platform = None
         self.last_platform = None
+        self.launched_from = None # ^^New Var
         self.score = 0
         self.landed = False
 
@@ -41,14 +42,18 @@ class EggPlayer:
         self.y += self.acceleration
 
         for plat in platforms:
+            # ^^Skip when came from launch
+            if plat == self.launched_from:
+                continue
             if collision(self, plat) and self.acceleration >= 0:
                 self.y = plat.y - self.HEIGHT
                 self.acceleration = 0
                 if plat != self.last_platform:
                     self.score += 1
-                
+
                 self.on_platform = plat
                 self.last_platform = plat
+                self.launched_from = None #^^
                 break
 
         if self.acceleration > 0:
@@ -75,11 +80,12 @@ class EggPlayer:
                 self.acceleration = 0
                 self.started = False
 
-        if self.on_platform: # If on platform playher speed match the platform speed
+        if self.on_platform: # If on platform player speed match the platform speed
             self.x += self.on_platform.speed * self.on_platform.direction
 
         if pyxel.btn(pyxel.KEY_SPACE) and self.acceleration == 0:
             self.acceleration = -3.5
+            self.launched_from = self.on_platform # ^^ Launched from initiator
             self.on_platform = None
 
         if pyxel.btn(pyxel.KEY_LEFT) and self.acceleration != 0:
