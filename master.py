@@ -1,5 +1,6 @@
 import pyxel
 import random
+import sys
 
 SPACE = 35 #SET PLATFORM DISTANCE
 
@@ -22,27 +23,56 @@ class EggPlayer:
         self.started = False
         self.on_platform = None
         self.last_platform = None
-        self.launched_from = None  # ^^
+        self.launched_from = None
         self.score = 0
         self.landed = False
+        # ^^ Variable to keep track of respawn time
+        self.respawn_timer = 0
 
         # Physics
         self.gravity = 0.15
         self.acceleration = 0
 
-    def update(self, platforms, scroll_y):
-        if not self.started:
-            if pyxel.btnp(pyxel.KEY_SPACE):
-                self.started = True
-                self.acceleration = -3.5
+    def update(self, platforms, scroll_y, fps):
+        if self.respawn_timer > 0:
+            self.handle_respawn()
             return
 
+        if not self.started:
+            self.handle_game_start()
+            return
+
+        self.handle_physics()
+        self.handle_platform_collision(platforms)
+        self.check_death(scroll_y, fps)
+        self.handle_movement()
+        self.update_falling_state()
+
+    # ^^ New Separate respawn logic ^^
+    def handle_respawn(self):
+        self.respawn_timer -= 1
+        if self.respawn_timer == 0 and self.lives > 0:
+            if self.last_platform:
+                self.reset_to_platform()
+            else:
+                self.reset_to_spawn()
+
+    # Separate game start logic ^^
+    def handle_game_start(self):
+        if pyxel.btnp(pyxel.KEY_SPACE):
+            self.started = True
+            self.acceleration = -3.5
+
+    # Separate physics logic ^^
+    def handle_physics(self):
         self.acceleration += self.gravity
         self.acceleration = min(self.acceleration, 3.5)
         self.y += self.acceleration
 
+    # Separate platform collision logic ^^
+    def handle_platform_collision(self, platforms):
         for plat in platforms:
-            if plat == self.launched_from:  # ^^
+            if plat == self.launched_from:
                 continue
             if collision(self, plat) and self.acceleration >= 0:
                 self.y = plat.y - self.HEIGHT
@@ -52,35 +82,24 @@ class EggPlayer:
 
                 self.on_platform = plat
                 self.last_platform = plat
-                self.launched_from = None  # ^^
+                self.launched_from = None
                 break
 
         if self.acceleration > 0:
             self.on_platform = None
 
+    # Separate death check logic ^^
+    def check_death(self, scroll_y, fps):
         death_line = scroll_y + 128
         if self.y > death_line:
             self.lives -= 1
             self.launched_from = None  # ^^
-            if self.lives > 0 and self.last_platform: # Death at platforms
-                self.y = self.last_platform.y - self.HEIGHT
-                self.x = self.last_platform.x + self.last_platform.WIDTH // 2 - self.WIDTH // 2
-                self.acceleration = 0
-                self.on_platform = self.last_platform
-                self.is_falling = False
-            elif self.lives > 0 and self.last_platform is None: # Death at spawn
-                self.y = 96
-                self.x = 56
-                self.acceleration = 0
-                self.is_falling = False
-                self.on_platform = None
-                self.started = False
-            else: # No more lives
-                self.y = death_line - 1
-                self.acceleration = 0
-                self.started = False
+            self.respawn_timer = fps
+            self.y = death_line + 100
 
-        if self.on_platform: # If on platform playher speed match the platform speed
+    # Separate movement logic ^^
+    def handle_movement(self):
+        if self.on_platform:
             self.x += self.on_platform.speed * self.on_platform.direction
 
         if pyxel.btn(pyxel.KEY_SPACE) and self.acceleration == 0:
@@ -93,6 +112,8 @@ class EggPlayer:
         if pyxel.btn(pyxel.KEY_RIGHT) and self.acceleration != 0:
             self.x += 2
 
+    # Separate falling state logic ^^
+    def update_falling_state(self):
         if self.on_platform:
             self.is_falling = False
         elif self.acceleration > 0:
@@ -100,17 +121,37 @@ class EggPlayer:
         else:
             self.is_falling = False
 
+    # Separate respawn positioning ^^
+    def reset_to_platform(self):
+        self.y = self.last_platform.y - self.HEIGHT
+        self.x = self.last_platform.x + self.last_platform.WIDTH // 2 - self.WIDTH // 2
+        self.acceleration = 0
+        self.on_platform = self.last_platform
+        self.is_falling = False
+
+    # Separate spawn positioning ^^
+    def reset_to_spawn(self):
+        self.y = 96
+        self.x = 56
+        self.acceleration = 0
+        self.is_falling = False
+        self.on_platform = None
+        self.started = False
+
     def draw(self):
-        pyxel.blt(
-            self.x,
-            self.y,
-            self.IMG,
-            self.U,
-            self.V,
-            self.WIDTH,
-            self.HEIGHT,
-            self.COL
-        )
+        # ^^ Don't spawn egg if timer isn't done
+        if self.respawn_timer == 0:
+            pyxel.blt(
+                self.x,
+                self.y,
+                self.IMG,
+                self.U,
+                self.V,
+                self.WIDTH,
+                self.HEIGHT,
+                self.COL
+            )
+
 class Platform:
     def __init__(self, x, y):
         # Sprite Paramaters
@@ -151,6 +192,13 @@ class Platform:
 
 class EggRiseApp:
     def __init__(self):
+        # ^^ Base timer on attained FPS
+        self.fps = 30  # ^^ Default runnable FPS if no FPS input
+        if '--fps' in sys.argv:
+            fps_index = sys.argv.index('--fps')
+            if fps_index + 1 < len(sys.argv):
+                self.fps = int(sys.argv[fps_index + 1])
+
         pyxel.init(128, 128, title="Pyxel Egg Rise Platformer")
         pyxel.load("platformer.pyxres")
         self.player = EggPlayer()
@@ -159,7 +207,7 @@ class EggRiseApp:
         pyxel.run(self.update, self.draw)
 
     def update(self):
-        self.player.update(self.platform, self.scroll_y)
+        self.player.update(self.platform, self.scroll_y, self.fps)
         for plat in self.platform:
             plat.update()
 
