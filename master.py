@@ -1,18 +1,10 @@
 import sys
+import argparse
 import pyxel
 import random
 import time
+import math
 from typing import List, Optional
-
-SPACE = 35 #SET PLATFORM DISTANCE
-
-def collision(player: 'EggPlayer', platform: 'Platform') -> bool:
-    return (
-        player.x < platform.x + platform.WIDTH and
-        player.x + player.WIDTH > platform.x and
-        player.y + player.HEIGHT <= platform.y + 5 and
-        player.y + player.HEIGHT >= platform.y
-    )
 
 class EggPlayer:
     def __init__(self) -> None:
@@ -44,8 +36,13 @@ class EggPlayer:
         # Respawn timer
         self.respawn_timer = 0.0
 
+        # Camera reference for death checking
+        self.camera: Optional['Camera'] = None
+
     def update(self, platforms: List['Platform'], scroll_y: int, camera: 'Camera', dt: float) -> None:
-        # Time parameter
+        # Store camera reference
+        self.camera = camera
+
         if self.respawn_timer > 0:
             self.handle_respawn(dt)
             return
@@ -61,6 +58,10 @@ class EggPlayer:
             self.check_death(scroll_y)
             self.handle_movement()
             self.update_falling_state()
+        else:
+            # v6: During camera transitions, freeze player position (x and y constant)
+            # and skip physics/movement/death checks
+            return
 
     def handle_respawn(self, dt: float) -> None:
         # Subtract elapsed time
@@ -103,7 +104,13 @@ class EggPlayer:
             self.on_platform = None
 
     def check_death(self, scroll_y: int) -> None:
+        # Skip death checking entirely during camera transitions
+        if self.camera and self.camera.transitioning:
+            return
+
+        # Normal death checking when not transitioning
         death_line = scroll_y + 128
+
         if self.y > death_line:
             pyxel.playm(3, loop=False)
             self.lives -= 1
@@ -112,11 +119,21 @@ class EggPlayer:
             self.y = death_line + 100
 
     def handle_movement(self) -> None:
-        # Move with platform horizontally
+        # Move with platform - use simple horizontal tracking like v5
         if self.on_platform:
-            self.x += self.on_platform.speed * self.on_platform.direction
+            # For elliptical platforms, only track horizontal movement
+            if hasattr(self.on_platform, 'elliptical_mode') and self.on_platform.elliptical_mode:
+                # Get horizontal movement only
+                prev_x = getattr(self.on_platform, '_prev_x', self.on_platform.x)
+                delta_x = self.on_platform.x - prev_x
+                self.x += delta_x
+                # DO NOT move vertically with elliptical platforms - let physics handle landing
+            else:
+                # For regular platforms, use the original v5 method
+                self.x += self.on_platform.speed * self.on_platform.direction
 
-        if pyxel.btn(pyxel.KEY_SPACE) and self.acceleration == 0:
+        # v1/v3: Launch only when grounded, not transitioning; use single-press
+        if pyxel.btnp(pyxel.KEY_SPACE) and self.acceleration == 0 and not (self.camera and self.camera.transitioning):
             self.acceleration = -3.5
             self.launched_from = self.on_platform
             self.on_platform = None
@@ -191,8 +208,9 @@ class Camera:
         # Create 2 new platforms that will appear from above
         p1_init_y = y1 - self._distance_to_move
         p2_init_y = y2 - self._distance_to_move
-        self._new_p1 = Platform(random.randint(0, 100), p1_init_y)
-        self._new_p2 = Platform(random.randint(0, 100), p2_init_y)
+        # Cast to int for type checker; drawing math tolerates integer y
+        self._new_p1 = Platform(random.randint(0, 100), int(p1_init_y))
+        self._new_p2 = Platform(random.randint(0, 100), int(p2_init_y))
 
         # Add new platforms to the list
         platforms.extend([self._new_p1, self._new_p2])
@@ -249,6 +267,14 @@ class Camera:
             return True
         return False
 
+def collision(player: 'EggPlayer', platform: 'Platform') -> bool:
+    return (
+        player.x < platform.x + platform.WIDTH and
+        player.x + player.WIDTH > platform.x and
+        player.y + player.HEIGHT <= platform.y + 5 and
+        player.y + player.HEIGHT >= platform.y
+    )
+
 class Platform:
     def __init__(self, x: int, y: int) -> None:
         # Sprite Paramaters
@@ -265,17 +291,83 @@ class Platform:
         self.speed = random.uniform(0.5, 1.5)
         self.direction = random.choice([-1,1])
 
-    def update(self, camera: Camera) -> None:
-        # Don't move horizontally if transitioning
-        if not camera.transitioning:
-            self.x += self.speed * self.direction
+        # v6: Elliptical movement properties (disabled by default)
+        self.elliptical_mode = False
+        self.ellipse_center_x = x
+        self.ellipse_center_y = y
+        # Generate reasonable ellipse parameters
+        axis1 = random.uniform(20, 35)
+        axis2 = random.uniform(12, 25)
+        # Ensure they're different
+        if abs(axis1 - axis2) < 8:
+            axis2 = axis1 + random.uniform(8, 12)
+        # Randomly assign which is major/minor
+        if random.choice([True, False]):
+            self.ellipse_a = max(axis1, axis2)  # Semi-major axis (horizontal)
+            self.ellipse_b = min(axis1, axis2)  # Semi-minor axis (vertical)
+        else:
+            self.ellipse_a = min(axis1, axis2)
+            self.ellipse_b = max(axis1, axis2)
+        self.ellipse_angle = 0
+        self.ellipse_speed = random.uniform(0.02, 0.04)
+        self.ellipse_time = 0
 
-            if self.x <= 0:
-                self.x = 0
-                self.direction = 1
-            elif self.x + self.WIDTH >= 128:
-                self.x = 128 - self.WIDTH
-                self.direction = -1
+        # Position tracking for player movement
+        self._prev_x = x
+        self._prev_y = y
+
+    def update(self, camera: Camera) -> None:
+        # Store previous position before updating (used by egg to follow x movement)
+        self._prev_x = self.x
+        self._prev_y = self.y
+
+        # v3: Keep x constant during camera transition (no platform movement)
+        if not camera.transitioning:
+            if self.elliptical_mode:
+                # v6: Update elliptical movement
+                self.ellipse_time += self.ellipse_speed
+                new_x = self.ellipse_center_x + self.ellipse_a * math.cos(self.ellipse_time)
+                new_y = self.ellipse_center_y + self.ellipse_b * math.sin(self.ellipse_time)
+
+                # Convert from center-based x to left-edge x and clamp
+                left_x = new_x - self.WIDTH // 2
+                self.x = max(0, min(left_x, 128 - self.WIDTH))
+                # Keep vertical movement very limited (visible but playable)
+                self.y = max(self.ellipse_center_y - 10, min(new_y, self.ellipse_center_y + 10))
+            else:
+                # Original horizontal movement
+                self.x += self.speed * self.direction
+
+                if self.x <= 0:
+                    self.x = 0
+                    self.direction = 1
+                elif self.x + self.WIDTH >= 128:
+                    self.x = 128 - self.WIDTH
+                    self.direction = -1
+
+    def enable_elliptical_movement(self, other_platforms: List['Platform']) -> None:
+        # v6: Enable ellipse for this middle platform starting this segment
+        # Set ellipse center to current position
+        self.ellipse_center_x = self.x + self.WIDTH // 2
+        self.ellipse_center_y = self.y
+
+        # Use much smaller vertical movement to prevent death issues
+        # Keep it small but visible
+        self.ellipse_a = random.uniform(25, 35)  # Horizontal axis
+        self.ellipse_b = random.uniform(8, 12)   # Small vertical axis to prevent death
+
+        # Ensure they're different
+        if abs(self.ellipse_a - self.ellipse_b) < 8:
+            self.ellipse_b = 8
+            self.ellipse_a = 30
+
+        # Ensure horizontal axis fits on screen
+        max_horizontal = min(35, (128 - self.WIDTH) // 2)
+        self.ellipse_a = min(self.ellipse_a, max_horizontal)
+
+        print(f"Elliptical movement enabled: center=({self.ellipse_center_x:.1f}, {self.ellipse_center_y:.1f}), axes=({self.ellipse_a:.1f}, {self.ellipse_b:.1f})")
+
+        self.elliptical_mode = True
 
     def draw(self, cam_y: int = 0) -> None:
         pyxel.blt(
@@ -291,11 +383,8 @@ class Platform:
 
 class EggRiseApp:
     def __init__(self) -> None:
-        pyxel.init(128, 128, title="Pyxel Egg Rise Platformer")
-        pyxel.load("platformer.pyxres")
-
+        pyxel.load("lab06.pyxres")
         self.start_game()
-
         pyxel.run(self.update, self.draw)
 
     def start_game(self) -> None:
@@ -308,6 +397,7 @@ class EggRiseApp:
 
         # 3 platforms
         self.y0 = 96  # Bottommost platform height
+        SPACE = 35 # Platform Distance
         self.y1 = self.y0 - SPACE  # Middle platform
         self.y2 = self.y1 - SPACE  # Topmost platform
         self.platform = [
@@ -321,6 +411,9 @@ class EggRiseApp:
         # Camera Position
         self.scroll_y = 0
         self.has_transitioned = False
+
+        # v6: Transition counter for elliptical movement (odd transitions enable ellipse)
+        self.transition_count = 0
 
         # Timer
         self.last_time = time.perf_counter()
@@ -349,13 +442,13 @@ class EggRiseApp:
         dt = now - self.last_time
         self.last_time = now
 
-        # ^^ Gameover check
+        # Gameover check
         if self.player.lives <= 0 and self.player.respawn_timer <= 0:
             if not self.game_over:
                 self.game_over_state()
             return
 
-        # Respawn time and transition
+        # Update player and platforms
         self.player.update(self.platform, self.scroll_y, self.camera, dt)
         for plat in self.platform:
             plat.update(self.camera)
@@ -365,6 +458,15 @@ class EggRiseApp:
             self.camera.update(dt)
             if self.camera.finalize_transition(self.platform, self.player, self.y0, self.y1, self.y2):
                 self.has_transitioned = True
+                self.transition_count += 1
+                # v6: Enable elliptical movement for middle platform on odd transitions
+                if self.transition_count % 2 == 1:
+                    middle_platform = sorted(self.platform, key=lambda p: p.y)[1]
+                    middle_platform.enable_elliptical_movement(self.platform)
+                else:
+                    # v6: Disable elliptical movement on even transitions
+                    middle_platform = sorted(self.platform, key=lambda p: p.y)[1]
+                    middle_platform.elliptical_mode = False
         else:
             self.check_for_transition()
 
@@ -378,7 +480,7 @@ class EggRiseApp:
     def draw(self) -> None:
         pyxel.cls(6)
 
-        # ^^ Gameover stated
+        # Gameover state
         if self.game_over:
             self.draw_game_over()
             return
@@ -394,22 +496,36 @@ class EggRiseApp:
             pyxel.bltm(0, -cam_offset, 0, 0, 0, 128, 128, 2)
 
         # UI elements
-        pyxel.text(0, 0, f"Lives: {self.player.lives}", 1)
-        pyxel.text(0, 8, f"Score: {self.player.score}", 1)
-        pyxel.text(0, 16, f"Falling {self.player.is_falling}", 1)
-        pyxel.text(0, 24, f"Transition: {self.camera.transitioning}", 1)
-        pyxel.text(0, 32, f"Transition Timer: {self.camera.timer:.2f}", 1)
-        pyxel.text(0, 40, f"Respawn Timer: {self.player.respawn_timer:.2f}", 1)
+        pyxel.text(0, 1, f"Press R to Restart", 8)
+        pyxel.text(0, 8, f"Lives: {self.player.lives}", 1)
+        pyxel.text(0, 16, f"Score: {self.player.score}", 1)
 
-    # Game over func
+        # Debug info for elliptical movement
+        if self.has_transitioned:
+            middle_platform = sorted(self.platform, key=lambda p: p.y)[1]
+            pyxel.text(0, 24, f"Elliptical: {middle_platform.elliptical_mode}", 1)
+            pyxel.text(0, 32, f"Transitions: {self.transition_count}", 1)
+
     def game_over_state(self) -> None:
         self.game_over = True
 
-    # Game over draw
     def draw_game_over(self) -> None:
         pyxel.stop()
         pyxel.text(45, 60, "GAME OVER", 8)
         pyxel.text(35, 70, f"Final Score: {self.player.score}", 7)
         pyxel.text(25, 80, "Press R to Restart", 7)
 
-EggRiseApp()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fps", type=int, default=30, help="Frames per second (30 or 60)")
+    args = parser.parse_args()
+
+    if args.fps not in (30, 60):
+        print("Error: --fps must be 30 or 60", file=sys.stderr)
+        sys.exit(2)
+
+    pyxel.init(128, 128, fps=args.fps, title="Egg Rise")
+    EggRiseApp()
+
+if __name__ == "__main__":
+    main()
