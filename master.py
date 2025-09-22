@@ -66,8 +66,12 @@ class EggPlayer:
         # Subtract elapsed time
         self.respawn_timer -= dt
         if self.respawn_timer <= 0.0 and self.lives > 0:
-            pyxel.playm(4, 0)
-            self.reset_to_platform()
+            if self.last_platform:
+                pyxel.playm(4, tick=0)
+                self.reset_to_platform()
+            else:
+                pyxel.playm(4, tick=0)
+                self.reset_to_spawn()
 
     def handle_game_start(self, camera: 'Camera') -> None:
         if pyxel.btnp(pyxel.KEY_SPACE) and not camera.transitioning:
@@ -87,7 +91,7 @@ class EggPlayer:
                 self.y = plat.y - self.HEIGHT
                 self.acceleration = 0
                 if plat != self.last_platform:
-                    pyxel.playm(2, 0)
+                    pyxel.playm(2, tick=0)
                     self.score += 1
 
                 self.on_platform = plat
@@ -101,7 +105,7 @@ class EggPlayer:
     def check_death(self, scroll_y: int) -> None:
         death_line = scroll_y + 128
         if self.y > death_line:
-            pyxel.playm(3, 0)
+            pyxel.playm(3, tick=0)
             self.lives -= 1
             self.launched_from = None
             self.respawn_timer = 1.0  # 1s respawn timer
@@ -116,7 +120,7 @@ class EggPlayer:
             self.acceleration = -3.5
             self.launched_from = self.on_platform
             self.on_platform = None
-            pyxel.playm(1, 0)
+            pyxel.playm(1, tick=0)
 
         if pyxel.btn(pyxel.KEY_LEFT) and self.acceleration != 0:
             self.x -= 2
@@ -141,6 +145,14 @@ class EggPlayer:
             self.acceleration = 0
             self.on_platform = self.last_platform
             self.is_falling = False
+
+    def reset_to_spawn(self) -> None:
+        self.y = 96
+        self.x = 56
+        self.acceleration = 0
+        self.is_falling = False
+        self.on_platform = None
+        self.started = False
 
     def draw(self, cam_y: int = 0) -> None:
         if self.respawn_timer <= 0.0:
