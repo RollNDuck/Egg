@@ -76,19 +76,20 @@ class EggPlayer:
 
     def handle_platform_collision(self, platforms: List['Platform']) -> None:
         for plat in platforms:
-            # FIXED: Check against ALL previously launched from platforms
-            if plat in self.launched_from_platforms:
-                continue
             if collision(self, plat) and self.acceleration >= 0:
-                self.y = plat.y - self.HEIGHT
-                self.acceleration = 0
-                if plat != self.last_platform:
-                    pyxel.playm(2, loop=False)
-                    self.score += 1
+                # Landing Parameters
+                if plat not in self.launched_from_platforms or self.on_platform is plat:
+                    self.y = plat.y - self.HEIGHT
+                    self.acceleration = 0
 
-                self.on_platform = plat
-                self.last_platform = plat
-                break
+                    # Sound and points
+                    if plat != self.last_platform and plat not in self.launched_from_platforms:
+                        pyxel.playm(2, loop=False)
+                        self.score += 1
+
+                    self.on_platform = plat
+                    self.last_platform = plat
+                    break
 
         if self.acceleration > 0:
             self.on_platform = None
@@ -98,7 +99,6 @@ class EggPlayer:
         if self.y > death_line:
             pyxel.playm(3, loop=False)
             self.lives -= 1
-            self.launched_from_platforms.clear()  # Clear launch history on death
             self.respawn_timer = 1.0  # 1s respawn timer
             self.y = death_line + 100
 
@@ -109,7 +109,7 @@ class EggPlayer:
 
         if pyxel.btnp(pyxel.KEY_SPACE) and self.acceleration == 0:
             self.acceleration = -3.5
-            # FIXED: Add current platform to launch history
+            # Add current platform to launch history
             if self.on_platform and self.on_platform not in self.launched_from_platforms:
                 self.launched_from_platforms.append(self.on_platform)
             self.on_platform = None
@@ -146,7 +146,13 @@ class EggPlayer:
         self.is_falling = False
         self.on_platform = None
         self.started = False
-        self.launched_from_platforms.clear()  # Clear launch history on spawn reset
+
+    def reset_for_new_game(self) -> None:
+        self.launched_from_platforms.clear()  # Clear launch history for new games
+        self.lives = 3
+        self.score = 0
+        self.respawn_timer = 0.0
+        self.last_platform = None
 
     def draw(self, cam_y: int = 0) -> None:
         if self.respawn_timer <= 0.0:
@@ -331,6 +337,8 @@ class EggRiseApp:
         self.game_over = False
 
     def reset_game(self) -> None:
+        # Reset player state for new game
+        self.player.reset_for_new_game()
         self.start_game()
 
     def setup_player_spawn(self) -> None:
@@ -401,10 +409,11 @@ class EggRiseApp:
         pyxel.text(0, 16, f"Score: {self.player.score}", 1)
 
         # UI for testing - uncomment to debug
-        # pyxel.text(0, 24, f"Falling {self.player.is_falling}", 1)
-        # pyxel.text(0, 32, f"Transition: {self.camera.transitioning}", 1)
-        # pyxel.text(0, 40, f"Transition Timer: {self.camera.timer:.2f}", 1)
-        # pyxel.text(0, 48, f"Respawn Timer: {self.player.respawn_timer:.2f}", 1)
+        pyxel.text(0, 24, f"Falling {self.player.is_falling}", 1)
+        pyxel.text(0, 32, f"Transition: {self.camera.transitioning}", 1)
+        pyxel.text(0, 40, f"Transition Timer: {self.camera.timer:.2f}", 1)
+        pyxel.text(0, 48, f"Respawn Timer: {self.player.respawn_timer:.2f}", 1)
+        pyxel.text(0, 56, f"Launched from: {len(self.player.launched_from_platforms)}", 1)
 
     # Game over func
     def game_over_state(self) -> None:
