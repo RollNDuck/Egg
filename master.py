@@ -67,10 +67,10 @@ class EggPlayer:
         self.respawn_timer -= dt
         if self.respawn_timer <= 0.0 and self.lives > 0:
             if self.last_platform:
-                pyxel.playm(4, tick=0)
+                pyxel.playm(4, loop=False)
                 self.reset_to_platform()
             else:
-                pyxel.playm(4, tick=0)
+                pyxel.playm(4, loop=False)
                 self.reset_to_spawn()
 
     def handle_game_start(self, camera: 'Camera') -> None:
@@ -91,7 +91,7 @@ class EggPlayer:
                 self.y = plat.y - self.HEIGHT
                 self.acceleration = 0
                 if plat != self.last_platform:
-                    pyxel.playm(2, tick=0)
+                    pyxel.playm(2, loop=False)
                     self.score += 1
 
                 self.on_platform = plat
@@ -105,7 +105,7 @@ class EggPlayer:
     def check_death(self, scroll_y: int) -> None:
         death_line = scroll_y + 128
         if self.y > death_line:
-            pyxel.playm(3, tick=0)
+            pyxel.playm(3, loop=False)
             self.lives -= 1
             self.launched_from = None
             self.respawn_timer = 1.0  # 1s respawn timer
@@ -120,7 +120,7 @@ class EggPlayer:
             self.acceleration = -3.5
             self.launched_from = self.on_platform
             self.on_platform = None
-            pyxel.playm(1, tick=0)
+            pyxel.playm(1, loop=False)
 
         if pyxel.btn(pyxel.KEY_LEFT) and self.acceleration != 0:
             self.x -= 2
