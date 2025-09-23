@@ -8,8 +8,8 @@ from typing import List, Optional
 class EggPlayer:
     def __init__(self) -> None:
         # Sprite Parameters
-        self.x: int = 0
-        self.y: int = 0
+        self.x: float = 0
+        self.y: float = 0
         self.IMG: int = 0
         self.U: int = 48
         self.V: int = 0
@@ -65,7 +65,7 @@ class EggPlayer:
         """
         0_EggReplacement:
         If the egg falls through the bottom of the screen, the player continues from the platform where the previous
-        egg was launched using a replacement egg.
+        egg was launched using a replacement egg. 
 
         There must be exactly one second between the egg in play disappearing from the screen and:
         Its replacement egg appearing (when applicable)
@@ -126,7 +126,7 @@ class EggPlayer:
             self.on_platform = None
 
     def check_death(self, scroll_y: int) -> None:
-        death_line: int = scroll_y + 128
+        death_line: float = scroll_y + 128
         if self.y > death_line:
             pyxel.playm(3, loop=False)
             self.lives -= 1
@@ -192,8 +192,8 @@ class EggPlayer:
         """
         if self.respawn_timer <= 0.0:
             pyxel.blt(
-                self.x,
-                self.y - cam_y,
+                int(self.x),
+                int(self.y - cam_y),
                 self.IMG,
                 self.U,
                 self.V,
@@ -306,8 +306,8 @@ def collision(player: 'EggPlayer', platform: 'Platform') -> bool:
 class Platform:
     def __init__(self, x: int, y: int) -> None:
         # Sprite Paramaters
-        self.x: int = x
-        self.y: int = y
+        self.x: float = x
+        self.y: float = y
         self.IMG: int = 0
         self.U: int = 8
         self.V: int = 8
@@ -351,8 +351,8 @@ class Platform:
         The egg and the moving platforms are rendered on screen using pyxel.blt and the provided lab06.pyxres file.
         """
         pyxel.blt(
-            self.x,
-            self.y - cam_y,
+            int(self.x),
+            int(self.y - cam_y),
             self.IMG,
             self.U,
             self.V,
