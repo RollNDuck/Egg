@@ -3,18 +3,17 @@ name: Pyright Type Check
 on:
   push:
     branches:
-      - v5          
+      - v5
       - v7
   pull_request:
     branches:
-      - v5          
+      - v5
       - v7
-  workflow_dispatch:  
+  workflow_dispatch:
 
 jobs:
   pyright:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -38,4 +37,4 @@ jobs:
         run: npm install --global pyright
 
       - name: Run Pyright type checker
-        run: pyright
+        run: pyright   
