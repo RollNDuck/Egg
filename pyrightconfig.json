@@ -1,5 +1,5 @@
 {
-  "strict": true,
+  "typeCheckingMode": "strict",
   "include": ["."],
   "exclude": ["**/venv", "**/node_modules", "**/__pycache__"]
 }
