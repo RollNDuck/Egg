@@ -1,3 +1,4 @@
+# pyright: strict
 import sys
 import argparse
 import pyxel
@@ -13,19 +14,12 @@ class EggPlayer:
         self.IMG: int = 0
         self.U: int = 48
         self.V: int = 0
-        """
-        0_Egg:
-        For simplicity, eggs are to be circular,
-        not elliptical. Eggs must have a radius
-        of 8 pixels.
-        """
         self.WIDTH: int = 16
         self.HEIGHT: int = 16
         self.DX: float = 0.5
         self.COL: int = 2
 
         # Status
-        """0_Egg: The player starts with a certain number of eggs"""
         self.lives: int = 3
         self.is_falling: bool = False
         self.started: bool = False
@@ -62,14 +56,6 @@ class EggPlayer:
 
     def handle_respawn(self, dt: float) -> None:
         # Subtract elapsed time
-        """
-        0_EggReplacement:
-        If the egg falls through the bottom of the screen, the player continues from the platform where the previous
-        egg was launched using a replacement egg. 
-
-        There must be exactly one second between the egg in play disappearing from the screen and:
-        Its replacement egg appearing (when applicable)
-        """
         self.respawn_timer -= dt
         if self.respawn_timer <= 0.0 and self.lives > 0:
             pyxel.playm(4, loop=False)
@@ -81,20 +67,11 @@ class EggPlayer:
             self.acceleration = -3.5
 
     def handle_physics(self) -> None:
-        """0_EggLaunching: As gravity (which must be a constant downward force) affects the egg in play while it is airborne"""
         self.acceleration += self.gravity
         self.acceleration = min(self.acceleration, 3.5)
         self.y += self.acceleration
 
     def handle_platform_collision(self, platforms: List['Platform']) -> None:
-        """
-        0_EggLaunching:
-        The top edge of the platform is the only area
-        the egg can land on (i.e., any part of the egg
-        cannot appear to be within the body of any platform).
-        The egg cannot land on any platform it was previously
-        launched from.
-        """
         for plat in platforms:
             if collision(self, plat) and self.acceleration >= 0:
                 # Landing Parameters
@@ -103,10 +80,6 @@ class EggPlayer:
                     self.acceleration = 0
 
                     # Sound and points
-                    """
-                    0_GameScore:
-                    With each successful landing of the egg on a platform, the player gets 1 point.
-                    """
                     if plat != self.last_platform and plat not in self.launched_from_platforms:
                         pyxel.playm(2, loop=False)
                         self.score += 1
@@ -115,13 +88,6 @@ class EggPlayer:
                     self.last_platform = plat
                     break
 
-        """
-        0_EggLaunching:
-        The egg can only land on a platform if its vertical
-        velocity is not going upward (i.e., the egg
-        must have nonpositive y-axis velocity to land on a platform).
-        Eggs going upward should not trigger any landing logic.
-        """
         if self.acceleration > 0:
             self.on_platform = None
 
@@ -138,14 +104,6 @@ class EggPlayer:
         if self.on_platform:
             self.x += self.on_platform.speed * self.on_platform.direction
 
-        """
-        0_EggLaunching:
-        When the player hits Spacebar once,
-        the current egg in play will be launched up into
-        the air from the platform it is on.
-        Hitting Spacebar while the egg in play
-        is airborne should have no effect.
-        """
         if pyxel.btnp(pyxel.KEY_SPACE) and self.acceleration == 0:
             self.acceleration = -3.5
             # Add current platform to launch history
@@ -186,10 +144,6 @@ class EggPlayer:
         self.last_platform = None
 
     def draw(self, cam_y: int = 0) -> None:
-        """
-        v2ProperGraphics:
-        The egg and the moving platforms are rendered on screen using pyxel.blt and the provided lab06.pyxres file.
-        """
         if self.respawn_timer <= 0.0:
             pyxel.blt(
                 int(self.x),
@@ -206,7 +160,6 @@ class Camera:
     def __init__(self) -> None:
         self.transitioning: bool = False
         self.timer: float = 0.0
-        """v3CameraTransition: This camera transition must take exactly two seconds regardless of the FPS value set."""
         self.duration: float = 2.0  # 2s topmost platform transition
         self.speed: float = 0.0
         self.offset_y: float = 0.0
@@ -224,13 +177,6 @@ class Camera:
         self._distance_to_move = y0 - self._initial_topmost_y
         self._old_top_platform = min(platforms, key=lambda p: p.y)
 
-        """
-        v3CameraTransition: Additionally, two new platforms P1 and P2 must appear from the top edge of the screen.
-        These platforms must move downward at the same rate as the other game objects at all times during the two-second
-        camera transition described above. After the camera transition, the y-coordinate of P1 must be equal to y1 and
-        that of P2 must be equal to y2. As such, they will necessarily be off-screen for some duration during the
-        two-second transition.
-        """
         # Create 2 new platforms that will appear from above
         p1_init_y: float = y1 - self._distance_to_move
         p2_init_y: float = y2 - self._distance_to_move
@@ -258,9 +204,6 @@ class Camera:
                 self.timer = 0.0
 
     def finalize_transition(self, platforms: List['Platform'], player: EggPlayer, y0: int, y1: int, y2: int) -> bool:
-        """
-        v3CameraTransition: All game objects must stop moving when the y-coordinate of the topmost platform becomes equal to y0.
-        """
         if self.transitioning and self.timer <= 0:
             # Set final y positions
             if self._old_top_platform:
@@ -317,27 +260,13 @@ class Platform:
         self.COL: int = 2
         # Movement
         self.speed: float = random.uniform(0.5, 1.5)
-        """
-        0_Platform:
-        The initial direction of movement of each platform
-        (either left or right) is determined at random (each outcome equally likely)
-        """
         self.direction: int = random.choice([-1,1])
 
     def update(self, camera: Camera) -> None:
-        """
-        v3CameraTransition:
-        During the camera transition, the x-coordinates of all game objects must be kept constant.
-        """
         # Don't move horizontally if transitioning
         if not camera.transitioning:
             self.x += self.speed * self.direction
 
-            """
-            0_Platform:
-            When a platform hits either the left or right edges of the screen,
-            it reverses its direction.
-            """
             if self.x <= 0:
                 self.x = 0
                 self.direction = 1
@@ -346,10 +275,6 @@ class Platform:
                 self.direction = -1
 
     def draw(self, cam_y: int = 0) -> None:
-        """
-        v2ProperGraphics:
-        The egg and the moving platforms are rendered on screen using pyxel.blt and the provided lab06.pyxres file.
-        """
         pyxel.blt(
             int(self.x),
             int(self.y - cam_y),
@@ -377,16 +302,6 @@ class EggRiseApp:
         self.camera: Camera = Camera()
         self.player: EggPlayer = EggPlayer()
 
-        """
-        0_Platforms:
-        There is at least S units of distance above the top surface and S units of distance below the bottom surface
-        of each platform for which no other platform may be present.
-
-        v3UnboundedNumberOfPlatforms:
-        The initial screen must have three platforms with the egg in play starting at the bottommost platform,
-        subject to the same S. The y-coordinate of the bottommost platform will be referred to as y0 with the
-        y-coordinates of the middle and topmost platforms referred to as y1 and y2, respectively.
-        """
         # 3 platforms
         self.y0: int = 96  # Bottommost platform height
         SPACE: int = 35
@@ -411,13 +326,11 @@ class EggRiseApp:
         self.game_over: bool = False
 
     def reset_game(self) -> None:
-        """v5ResetFeature: Hitting the R key should restart the game (i.e., the game state should be set to its initial value)."""
         # Reset player state for new game
         self.player.reset_for_new_game()
         self.start_game()
 
     def setup_player_spawn(self) -> None:
-        """0_Egg: One egg placed on the lowest moving platform which is said to be in play"""
         bottom_platform: Platform = max(self.platform, key=lambda p: p.y)
         self.player.x = bottom_platform.x + bottom_platform.WIDTH // 2 - self.player.WIDTH // 2
         self.player.y = bottom_platform.y - self.player.HEIGHT
@@ -435,14 +348,6 @@ class EggRiseApp:
         dt: float = now - self.last_time
         self.last_time = now
 
-        """
-        0_EggReplacement:
-        If the player is unable to replace the egg that fell due to having none (eggs)
-        left, the game ends with game over text appearing on screen (you may choose what the game over text contains).
-
-        There must be exactly one second between the egg in play disappearing from the screen and:
-        The game over text appearing (when applicable)
-        """
         # Gameover check
         if self.player.lives <= 0 and self.player.respawn_timer <= 0:
             if not self.game_over:
@@ -464,11 +369,6 @@ class EggRiseApp:
 
     def check_for_transition(self) -> None:
         # Start transition if egg is at topmost platform
-        """
-        v3CameraTransition:
-        Once the egg in play lands on the topmost platform, all game objects must move downward at the same rate
-        which gives the illusion that the camera is moving upward.
-        """
         topmost_platform: Platform = min(self.platform, key=lambda p: p.y)
         if (self.player.on_platform is topmost_platform and self.player.acceleration == 0):
             self.camera.start_transition(self.platform, self.y0, self.y1, self.y2)
@@ -493,9 +393,7 @@ class EggRiseApp:
 
         # UI elements
         pyxel.text(0, 1, f"Press R to Restart", 8)
-        """0_Egg: The total number of eggs of the player (including the current one in play) is shown on screen."""
         pyxel.text(0, 8, f"Lives: {self.player.lives}", 1)
-        """0_GameScore: The total score of the player is shown on screen."""
         pyxel.text(0, 16, f"Score: {self.player.score}", 1)
 
         # UI for testing - uncomment to debug
@@ -517,10 +415,6 @@ class EggRiseApp:
         pyxel.text(25, 80, "Press R to Restart", 7)
 
 def main() -> None:
-    """
-    Command line flags:
-    The value given for the --fps flag should set the FPS value supplied to Pyxel. The only accepted values are 30 and 60.
-    """
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument("--fps", type=int, default=30, help="Frames per second (30 or 60)")
     args: argparse.Namespace = parser.parse_args()
